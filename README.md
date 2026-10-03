@@ -1,5 +1,5 @@
 # Quad-CdS-Array-Michelson-Inferometer-Simulator
-Michelson-Inferometer-Simulator in HTML5 / JavaScript
+Michelson-Inferometer-Simulator in HTML5 / JavaScript that uses quad CdS Array to feed into a A/D input of a simulated ESP32.
 
 Created with Gemini 3.6 Thinking by Google.
 
