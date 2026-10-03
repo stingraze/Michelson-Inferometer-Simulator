@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Michelson Interferometer & ESP32 4-CdS Array Simulator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .font-mono {
+            font-family: 'Fira Code', monospace;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        /* Neon Glow Effects */
+        .glow-red {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+        }
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-red-500 selection:text-white">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50">
+        <div class="max-w-7xl mx-mx-auto px-4 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-red-950/80 border border-red-800 rounded-lg text-red-500">
+                    <i class="fa-solid fa-[#f43f5e] fa-atom text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight text-white flex items-center gap-2">
+                        Michelson Interferometer <span class="text-xs px-2 py-0.5 rounded bg-red-900/50 text-red-400 border border-red-700/50">650nm Laser</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">ESP32 4-CdS Array Spatial Fringe Reader & Wave Optics Simulator</p>
+                </div>
+            </div>
+
+            <!-- Status Badges & Quick Action -->
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-slate-300 font-mono" id="status-lambda">λ = 650.0 nm</span>
+                </div>
+                <button id="btn-toggle-laser" class="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition bg-red-600 hover:bg-red-500 text-white glow-red">
+                    <i class="fa-solid fa-power-off"></i> <span id="lbl-laser-state">Laser ON</span>
+                </button>
+                <button id="btn-open-guide" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-2">
+                    <i class="fa-solid fa-book-open text-cyan-400"></i> Physics Guide
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl w-full mx-auto p-4 space-y-6 flex-grow">
+
+        <!-- Top Section: Grid 2 Columns (Left: Optical Bench Diagram, Right: Physics Controls & Fringe View) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Left Panel: Optical Bench Interactive Visualizer (7 Cols) -->
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-xl">
+                <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-draw-polygon text-red-400"></i> Optical Bench Setup
+                    </h2>
+                    <span class="text-xs font-mono text-slate-400">Interactive Path Simulation</span>
+                </div>
+
+                <!-- Bench Canvas -->
+                <div class="relative w-full aspect-[4/3] bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden flex items-center justify-center">
+                    <canvas id="canvas-bench" class="w-full h-full block"></canvas>
+                    
+                    <!-- Overlay Legend -->
+                    <div class="absolute bottom-2 left-2 bg-slate-900/90 backdrop-blur border border-slate-800 p-2 rounded text-[11px] space-y-1 text-slate-300">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-1 bg-red-500 rounded"></span> Laser Light Beam
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-1 bg-amber-400 rounded"></span> Recombined Interference Beam
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Bench Controls -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 pt-3 border-t border-slate-800/60 text-xs">
+                    <button id="btn-piezo-sweep" class="p-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-wave-square text-cyan-400"></i>
+                        <span id="lbl-piezo">Start Piezo Sweep</span>
+                    </button>
+                    <button id="btn-add-vibe" class="p-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-water text-amber-400"></i>
+                        <span id="lbl-vibe">Add Table Vibration</span>
+                    </button>
+                    <button id="btn-reset-pos" class="p-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-rotate-left text-slate-400"></i> Reset Mirror
+                    </button>
+                    <button id="btn-toggle-cds-lag" class="p-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-clock-rotate-left text-purple-400"></i>
+                        <span id="lbl-lag">CdS Lag: ON (30ms)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Optical Physics Controls & Spatial Fringe Intensity Profile (5 Cols) -->
+            <div class="lg:col-span-5 flex flex-col gap-4">
+
+                <!-- Spatial Fringe Intensity Plot -->
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+                    <div class="flex items-center justify-between mb-2 pb-2 border-b border-slate-800">
+                        <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-line text-cyan-400"></i> Spatial Fringe Intensity I(x)
+                        </h2>
+                        <span class="text-xs font-mono text-cyan-400" id="readout-fringe-pitch">Pitch Λ: 1.30 mm</span>
+                    </div>
+
+                    <!-- Fringe Profile Canvas -->
+                    <div class="w-full h-44 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden relative">
+                        <canvas id="canvas-fringe" class="w-full h-full block"></canvas>
+                    </div>
+
+                    <!-- Sensor Array Position Labels -->
+                    <div class="grid grid-cols-4 gap-1 text-center mt-2 text-[11px] font-mono">
+                        <div class="bg-red-950/40 border border-red-800/60 text-red-300 p-1 rounded">
+                            <div class="font-bold">CdS 1</div>
+                            <div class="text-[10px] text-red-400">GPIO 34</div>
+                        </div>
+                        <div class="bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 p-1 rounded">
+                            <div class="font-bold">CdS 2</div>
+                            <div class="text-[10px] text-emerald-400">GPIO 35</div>
+                        </div>
+                        <div class="bg-sky-950/40 border border-sky-800/60 text-sky-300 p-1 rounded">
+                            <div class="font-bold">CdS 3</div>
+                            <div class="text-[10px] text-sky-400">GPIO 32</div>
+                        </div>
+                        <div class="bg-amber-950/40 border border-amber-800/60 text-amber-300 p-1 rounded">
+                            <div class="font-bold">CdS 4</div>
+                            <div class="text-[10px] text-amber-400">GPIO 33</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Optical Setup Sliders -->
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl space-y-3">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Physics Parameters</h3>
+
+                    <!-- Slider 1: Movable Mirror Offset d (nm) -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs font-mono">
+                            <span class="text-slate-300">Path Length Diff (Δd):</span>
+                            <span class="text-red-400 font-bold" id="val-mirror-d">0.0 nm</span>
+                        </div>
+                        <input id="slider-mirror-d" type="range" min="-1300" max="1300" value="0" step="2"
+                               class="w-full accent-red-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-500">
+                            <span>-1300 nm (-2λ)</span>
+                            <span>0 nm</span>
+                            <span>+1300 nm (+2λ)</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 2: Mirror Tilt Angle theta (mrad) -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs font-mono">
+                            <span class="text-slate-300">Mirror 2 Tilt Angle (θ):</span>
+                            <span class="text-cyan-400 font-bold" id="val-tilt">0.25 mrad</span>
+                        </div>
+                        <input id="slider-tilt" type="range" min="0.05" max="1.20" value="0.25" step="0.01"
+                               class="w-full accent-cyan-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-500">
+                            <span>Wide Fringes</span>
+                            <span>Narrow Fringes</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 3: Ambient Light Intensity -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs font-mono">
+                            <span class="text-slate-300">Ambient Light Floor:</span>
+                            <span class="text-amber-400 font-bold" id="val-ambient">5 %</span>
+                        </div>
+                        <input id="slider-ambient" type="range" min="0" max="30" value="5" step="1"
+                               class="w-full accent-amber-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Bottom Section: Multi-Channel ESP32 Serial Plotter & Circuit Model -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl space-y-4">
+            
+            <!-- Serial Plotter Header & Controls -->
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div>
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-microchip text-emerald-400"></i> ESP32 ADC Multi-Channel Serial Plotter
+                    </h2>
+                    <p class="text-xs text-slate-400">Simulating 12-bit ADC (0-4095) with $10\text{ k}\Omega$ Voltage Divider ($V_{in} = 3.3\text{V}$)</p>
+                </div>
+
+                <!-- Plotter Controls -->
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <button id="btn-plotter-pause" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center gap-1.5">
+                        <i class="fa-solid fa-pause text-amber-400"></i> <span id="lbl-pause">Pause Plot</span>
+                    </button>
+                    <button id="btn-plotter-clear" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center gap-1.5">
+                        <i class="fa-solid fa-trash-can text-slate-400"></i> Clear
+                    </button>
+                    <div class="flex items-center gap-2 ml-2 pl-2 border-l border-slate-700">
+                        <label class="text-slate-400">Plot Speed:</label>
+                        <input id="slider-speed" type="range" min="1" max="5" value="2" class="w-20 accent-emerald-500">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Plotter Grid Layout: Canvas Plotter on Left, Real-Time Sensor Telemetry Cards on Right -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                
+                <!-- Plotter Canvas (8 Cols) -->
+                <div class="lg:col-span-8 h-64 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden relative">
+                    <canvas id="canvas-plotter" class="w-full h-full block"></canvas>
+                </div>
+
+                <!-- Sensor Live Telemetry Cards (4 Cols) -->
+                <div class="lg:col-span-4 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-1 gap-2.5">
+                    
+                    <!-- CdS 1 Telemetry -->
+                    <div class="bg-slate-950 border-l-4 border-l-red-500 border-slate-800 border p-2.5 rounded flex items-center justify-between">
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-300">CdS 1 (GPIO 34)</div>
+                            <div class="text-[10px] text-slate-500">Pos x = -1.50 mm</div>
+                        </div>
+                        <div class="text-right font-mono">
+                            <div class="text-sm font-bold text-red-400" id="readout-adc-0">ADC: 2048</div>
+                            <div class="text-[10px] text-slate-400" id="readout-volt-0">1.65 V | 10.0 kΩ</div>
+                        </div>
+                    </div>
+
+                    <!-- CdS 2 Telemetry -->
+                    <div class="bg-slate-950 border-l-4 border-l-emerald-500 border-slate-800 border p-2.5 rounded flex items-center justify-between">
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-300">CdS 2 (GPIO 35)</div>
+                            <div class="text-[10px] text-slate-500">Pos x = -0.50 mm</div>
+                        </div>
+                        <div class="text-right font-mono">
+                            <div class="text-sm font-bold text-emerald-400" id="readout-adc-1">ADC: 2048</div>
+                            <div class="text-[10px] text-slate-400" id="readout-volt-1">1.65 V | 10.0 kΩ</div>
+                        </div>
+                    </div>
+
+                    <!-- CdS 3 Telemetry -->
+                    <div class="bg-slate-950 border-l-4 border-l-sky-500 border-slate-800 border p-2.5 rounded flex items-center justify-between">
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-300">CdS 3 (GPIO 32)</div>
+                            <div class="text-[10px] text-slate-500">Pos x = +0.50 mm</div>
+                        </div>
+                        <div class="text-right font-mono">
+                            <div class="text-sm font-bold text-sky-400" id="readout-adc-2">ADC: 2048</div>
+                            <div class="text-[10px] text-slate-400" id="readout-volt-2">1.65 V | 10.0 kΩ</div>
+                        </div>
+                    </div>
+
+                    <!-- CdS 4 Telemetry -->
+                    <div class="bg-slate-950 border-l-4 border-l-amber-500 border-slate-800 border p-2.5 rounded flex items-center justify-between">
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-300">CdS 4 (GPIO 33)</div>
+                            <div class="text-[10px] text-slate-500">Pos x = +1.50 mm</div>
+                        </div>
+                        <div class="text-right font-mono">
+                            <div class="text-sm font-bold text-amber-400" id="readout-adc-3">ADC: 2048</div>
+                            <div class="text-[10px] text-slate-400" id="readout-volt-3">1.65 V | 10.0 kΩ</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Physics & Educational Modal -->
+    <div id="modal-guide" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-900 border border-slate-800 max-w-2xl w-full rounded-xl p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-bold text-lg text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-graduation-cap text-cyan-400"></i> Physics & Engineering Principles
+                </h3>
+                <button id="btn-close-guide" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-xs text-slate-300 leading-relaxed">
+                <section>
+                    <h4 class="font-semibold text-cyan-400 text-sm mb-1">1. Wave Interference Equation</h4>
+                    <p>When the 650nm laser beam is split and recombined, the light intensity $I(x, \Delta d)$ at detector coordinate $x$ is given by:</p>
+                    <div class="bg-slate-950 p-2.5 rounded font-mono text-center text-amber-300 my-2">
+                        I(x) = I₀ · [1 + cos( (4π · Δd / λ) + (2π · x / Λ) )]
+                    </div>
+                    <p>Where $\Delta d$ is the path difference between the fixed and movable mirrors, $\lambda = 650\text{ nm}$, and $\Lambda = \frac{\lambda}{2\theta}$ is the spatial fringe pitch created by mirror tilt $\theta$.</p>
+                </section>
+
+                <section>
+                    <h4 class="font-semibold text-cyan-400 text-sm mb-1">2. Why Use 4 CdS Photoresistors?</h4>
+                    <p>A single photoresistor only measures light intensity at <em>one point</em> in space. By arranging 4 CdS sensors in a linear array across the interference spot:</p>
+                    <ul class="list-disc list-inside space-y-1 mt-1 text-slate-400">
+                        <li><strong>Quadrature & Direction Tracking:</strong> Spacing sensors at sub-fringe intervals allows determination of the <em>direction</em> of mirror motion (forward vs. backward) from phase leads/lags.</li>
+                        <li><strong>Spatial Fringe Profiling:</strong> Directly measures the spatial fringe pitch $\Lambda$ and tilt angle $\theta$ without mechanically sweeping the detector.</li>
+                        <li><strong>Common-Mode Noise Cancellation:</strong> Helps isolate true optical phase shifts from global laser power fluctuations or ambient light changes.</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4 class="font-semibold text-cyan-400 text-sm mb-1">3. ESP32 Circuit & CdS Response Lag</h4>
+                    <p>Each CdS cell is wired in a voltage divider circuit with a $10\text{ k}\Omega$ resistor connected to ESP32 ADC pins (GPIO 34, 35, 32, 33):</p>
+                    <div class="bg-slate-950 p-2 rounded font-mono text-center text-slate-300 my-2">
+                        V_out = 3.3V · [ R_fixed / (R_CdS + R_fixed) ]
+                    </div>
+                    <p>CdS photoresistors rely on bulk semiconductor electron-hole recombination, introducing a temporal response delay ($\sim 20\text{ to }50\text{ ms}$). This simulator accurately models this thermal photoconductive inertia!</p>
+                </section>
+            </div>
+
+            <div class="pt-3 border-t border-slate-800 text-right">
+                <button id="btn-close-guide-2" class="px-4 py-2 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition">
+                    Got it, back to lab!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Simulation Script Logic -->
+    <script>
+        // --- PHYSICS CONSTANTS & STATE ---
+        const LAMBDA_NM = 650.0; // 650nm Red Laser
+        const SENSOR_POSITIONS_MM = [-1.50, -0.50, 0.50, 1.50]; // Physical positions of CdS 1..4 in mm
+        const GPIO_PINS = [34, 35, 32, 33];
+        const CHANNEL_COLORS = ['#ef4444', '#10b981', '#38bdf8', '#f59e0b']; // Red, Green, Blue, Amber
+
+        let state = {
+            laserOn: true,
+            mirrorD_nm: 0.0,      // Movable mirror path length offset in nm
+            tilt_mrad: 0.25,      // Mirror tilt angle in milliradians
+            ambient_pct: 5.0,     // Ambient light percentage
+            piezoSweeping: false,
+            piezoTime: 0,
+            vibrationOn: false,
+            cdsLagEnabled: true,
+            plotterPaused: false,
+            plotSpeed: 2,
+
+            // Raw light intensities at sensors (0.0 to 1.0)
+            targetIntensities: [0.5, 0.5, 0.5, 0.5],
+            smoothedIntensities: [0.5, 0.5, 0.5, 0.5],
+
+            // Electrical outputs
+            resistances: [10000, 10000, 10000, 10000],
+            voltages: [1.65, 1.65, 1.65, 1.65],
+            adcValues: [2048, 2048, 2048, 2048],
+
+            // Serial Plotter Buffer (history of last 300 points)
+            plotterHistory: []
+        };
+
+        const MAX_HISTORY = 300;
+
+        // Initialize Plotter History Buffer
+        for (let i = 0; i < MAX_HISTORY; i++) {
+            state.plotterHistory.push([2048, 2048, 2048, 2048]);
+        }
+
+        // --- DOM ELEMENTS ---
+        const canvasBench = document.getElementById('canvas-bench');
+        const ctxBench = canvasBench.getContext('2d');
+
+        const canvasFringe = document.getElementById('canvas-fringe');
+        const ctxFringe = canvasFringe.getContext('2d');
+
+        const canvasPlotter = document.getElementById('canvas-plotter');
+        const ctxPlotter = canvasPlotter.getContext('2d');
+
+        // Controls & Readouts
+        const sliderMirrorD = document.getElementById('slider-mirror-d');
+        const valMirrorD = document.getElementById('val-mirror-d');
+        const sliderTilt = document.getElementById('slider-tilt');
+        const valTilt = document.getElementById('val-tilt');
+        const sliderAmbient = document.getElementById('slider-ambient');
+        const valAmbient = document.getElementById('val-ambient');
+        const sliderSpeed = document.getElementById('slider-speed');
+
+        const btnToggleLaser = document.getElementById('btn-toggle-laser');
+        const lblLaserState = document.getElementById('lbl-laser-state');
+        const btnPiezoSweep = document.getElementById('btn-piezo-sweep');
+        const lblPiezo = document.getElementById('lbl-piezo');
+        const btnAddVibe = document.getElementById('btn-add-vibe');
+        const lblVibe = document.getElementById('lbl-vibe');
+        const btnResetPos = document.getElementById('btn-reset-pos');
+        const btnToggleLag = document.getElementById('btn-toggle-cds-lag');
+        const lblLag = document.getElementById('lbl-lag');
+
+        const btnPlotterPause = document.getElementById('btn-plotter-pause');
+        const lblPause = document.getElementById('lbl-pause');
+        const btnPlotterClear = document.getElementById('btn-plotter-clear');
+
+        const readoutFringePitch = document.getElementById('readout-fringe-pitch');
+
+        // Modal
+        const modalGuide = document.getElementById('modal-guide');
+        const btnOpenGuide = document.getElementById('btn-open-guide');
+        const btnCloseGuide = document.getElementById('btn-close-guide');
+        const btnCloseGuide2 = document.getElementById('btn-close-guide-2');
+
+        // Handle Canvas Resizing
+        function resizeCanvases() {
+            const configureCanvas = (canvas) => {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * window.devicePixelRatio;
+                canvas.height = rect.height * window.devicePixelRatio;
+            };
+            configureCanvas(canvasBench);
+            configureCanvas(canvasFringe);
+            configureCanvas(canvasPlotter);
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        // --- PHYSICS & ELECTRICAL CALCULATION ENGINE ---
+        function updatePhysics(dt) {
+            // 1. Piezo Modulation (Continuous sine sweep of mirror position)
+            if (state.piezoSweeping) {
+                state.piezoTime += dt * 3.0;
+                state.mirrorD_nm = Math.sin(state.piezoTime) * 800.0; // +/- 800 nm sweep
+                sliderMirrorD.value = state.mirrorD_nm;
+            } else {
+                state.mirrorD_nm = parseFloat(sliderMirrorD.value);
+            }
+            valMirrorD.innerText = `${state.mirrorD_nm.toFixed(1)} nm`;
+
+            // 2. Vibration Jitter
+            let vibeNoise = 0;
+            if (state.vibrationOn) {
+                vibeNoise = (Math.random() - 0.5) * 40.0; // +/- 20nm acoustic jitter
+            }
+
+            const totalDeltaD = state.mirrorD_nm + vibeNoise;
+
+            // 3. Mirror Tilt and Spatial Fringe Pitch (Lambda_spatial in mm)
+            state.tilt_mrad = parseFloat(sliderTilt.value);
+            valTilt.innerText = `${state.tilt_mrad.toFixed(2)} mrad`;
+
+            // Spatial pitch equation: Λ = λ / (2 * θ)
+            // λ in mm = 650e-6 mm; θ in rad = tilt_mrad * 1e-3
+            const lambda_mm = LAMBDA_NM * 1e-6;
+            const theta_rad = state.tilt_mrad * 1e-3;
+            const spatialPitch_mm = lambda_mm / (2.0 * theta_rad);
+            readoutFringePitch.innerText = `Pitch Λ: ${spatialPitch_mm.toFixed(2)} mm`;
+
+            // 4. Calculate Intensity at each of the 4 CdS Sensor Coordinates
+            const ambient = (parseFloat(sliderAmbient.value) / 100.0);
+            valAmbient.innerText = `${sliderAmbient.value} %`;
+
+            for (let i = 0; i < 4; i++) {
+                if (!state.laserOn) {
+                    state.targetIntensities[i] = ambient;
+                } else {
+                    const x_mm = SENSOR_POSITIONS_MM[i];
+                    // Phase formula: phi = 4*pi*d/lambda + 2*pi*x/spatialPitch
+                    const phaseDeltaD = (4.0 * Math.PI * totalDeltaD) / LAMBDA_NM;
+                    const phaseSpatial = (2.0 * Math.PI * x_mm) / spatialPitch_mm;
+                    const totalPhase = phaseDeltaD + phaseSpatial;
+
+                    // Cosine interference pattern: I = 0.5 * (1 + cos(phi))
+                    const interference = 0.5 * (1.0 + Math.cos(totalPhase));
+
+                    // Combine with ambient floor & clamp
+                    state.targetIntensities[i] = Math.min(1.0, Math.max(0.0, interference * (1.0 - ambient) + ambient));
+                }
+
+                // 5. Model CdS Photoresistor Lag (Exponential Smoothing Filter)
+                if (state.cdsLagEnabled) {
+                    const lagAlpha = 0.08; // ~30ms filter time constant
+                    state.smoothedIntensities[i] += lagAlpha * (state.targetIntensities[i] - state.smoothedIntensities[i]);
+                } else {
+                    state.smoothedIntensities[i] = state.targetIntensities[i];
+                }
+
+                // 6. Photoconductive Resistance Curve R_CdS
+                // Bright (I=1.0) -> R = 2.0 kΩ, Dark (I=0.0) -> R = 80.0 kΩ
+                const I = state.smoothedIntensities[i];
+                const rCdS = 2000.0 + 78000.0 * Math.pow(1.0 - I, 1.8);
+                state.resistances[i] = rCdS;
+
+                // 7. ESP32 Voltage Divider Circuit (R_fixed = 10k, V_in = 3.3V)
+                // V_out = 3.3 * R_fixed / (R_CdS + R_fixed)
+                const rFixed = 10000.0;
+                const vOut = 3.3 * (rFixed / (rCdS + rFixed));
+                state.voltages[i] = vOut;
+
+                // 8. 12-bit ADC Conversion (0 to 4095 LSB) + slight thermal noise
+                const adcNoise = (Math.random() - 0.5) * 4.0;
+                let adc = Math.round((vOut / 3.3) * 4095.0 + adcNoise);
+                adc = Math.max(0, Math.min(4095, adc));
+                state.adcValues[i] = adc;
+
+                // Update UI Telemetry Cards
+                document.getElementById(`readout-adc-${i}`).innerText = `ADC: ${adc}`;
+                document.getElementById(`readout-volt-${i}`).innerText = `${vOut.toFixed(2)} V | ${(rCdS/1000).toFixed(1)} kΩ`;
+            }
+
+            // 9. Append to Plotter History if not paused
+            if (!state.plotterPaused) {
+                const steps = state.plotSpeed;
+                for (let s = 0; s < steps; s++) {
+                    state.plotterHistory.push([...state.adcValues]);
+                    if (state.plotterHistory.length > MAX_HISTORY) {
+                        state.plotterHistory.shift();
+                    }
+                }
+            }
+        }
+
+        // --- CANVAS 1: OPTICAL BENCH RENDERER ---
+        function drawOpticalBench() {
+            const w = canvasBench.width;
+            const h = canvasBench.height;
+            const scale = window.devicePixelRatio;
+
+            ctxBench.clearRect(0, 0, w, h);
+
+            // Dark Grid Background
+            ctxBench.strokeStyle = '#1e293b';
+            ctxBench.lineWidth = 1 * scale;
+            const gridSize = 30 * scale;
+            for (let x = 0; x < w; x += gridSize) {
+                ctxBench.beginPath(); ctxBench.moveTo(x, 0); ctxBench.lineTo(x, h); ctxBench.stroke();
+            }
+            for (let y = 0; y < h; y += gridSize) {
+                ctxBench.beginPath(); ctxBench.moveTo(0, y); ctxBench.lineTo(w, y); ctxBench.stroke();
+            }
+
+            // Core Layout Coordinates
+            const laserX = 60 * scale;
+            const laserY = h * 0.5;
+            const bsX = w * 0.42;
+            const bsY = h * 0.5;
+            const m1X = bsX; // Fixed mirror (Top)
+            const m1Y = 60 * scale;
+            const m2X = w * 0.82; // Movable mirror (Right)
+            const m2Y = bsY;
+            const cdsX = bsX; // CdS Sensor block (Bottom)
+            const cdsY = h - 60 * scale;
+
+            // --- LASER BEAM DRAWING (GLOW EFFECT) ---
+            if (state.laserOn) {
+                ctxBench.save();
+                ctxBench.lineCap = 'round';
+
+                // Beam 1: Laser -> Beam Splitter
+                drawGlowingBeam(laserX, laserY, bsX, bsY, '#ef4444', 4 * scale);
+
+                // Beam Split Path A: Beam Splitter -> Fixed Mirror 1 (Up)
+                drawGlowingBeam(bsX, bsY, m1X, m1Y, '#ef4444', 3 * scale);
+                // Return Path A: Fixed Mirror 1 -> Beam Splitter (Down)
+                drawGlowingBeam(m1X, m1Y, bsX, bsY, '#f87171', 3 * scale);
+
+                // Beam Split Path B: Beam Splitter -> Movable Mirror 2 (Right)
+                drawGlowingBeam(bsX, bsY, m2X, m2Y, '#ef4444', 3 * scale);
+                // Return Path B: Movable Mirror 2 -> Beam Splitter (Left)
+                drawGlowingBeam(m2X, m2Y, bsX, bsY, '#f87171', 3 * scale);
+
+                // Recombined Interference Beam: Beam Splitter -> CdS Array (Down)
+                drawGlowingBeam(bsX, bsY, cdsX, cdsY, '#fbbf24', 5 * scale); // Amber interference color
+
+                ctxBench.restore();
+            }
+
+            // --- COMPONENTS RENDER ---
+            // 1. Red Laser Module
+            ctxBench.fillStyle = '#334155';
+            ctxBench.strokeStyle = '#ef4444';
+            ctxBench.lineWidth = 2 * scale;
+            ctxBench.fillRect(laserX - 35 * scale, laserY - 15 * scale, 35 * scale, 30 * scale);
+            ctxBench.strokeRect(laserX - 35 * scale, laserY - 15 * scale, 35 * scale, 30 * scale);
+            ctxBench.fillStyle = '#f8fafc';
+            ctxBench.font = `${10 * scale}px sans-serif`;
+            ctxBench.fillText("650nm Laser", laserX - 45 * scale, laserY - 22 * scale);
+
+            // 2. Beam Splitter Cube (50/50)
+            const cubeSize = 36 * scale;
+            ctxBench.fillStyle = 'rgba(148, 163, 184, 0.25)';
+            ctxBench.strokeStyle = '#38bdf8';
+            ctxBench.lineWidth = 1.5 * scale;
+            ctxBench.fillRect(bsX - cubeSize/2, bsY - cubeSize/2, cubeSize, cubeSize);
+            ctxBench.strokeRect(bsX - cubeSize/2, bsY - cubeSize/2, cubeSize, cubeSize);
+            // Splitting Diagonal Line
+            ctxBench.beginPath();
+            ctxBench.moveTo(bsX - cubeSize/2, bsY + cubeSize/2);
+            ctxBench.lineTo(bsX + cubeSize/2, bsY - cubeSize/2);
+            ctxBench.strokeStyle = '#06b6d4';
+            ctxBench.stroke();
+            ctxBench.fillText("50/50 BS", bsX - 20 * scale, bsY + 30 * scale);
+
+            // 3. Fixed Mirror 1 (Top)
+            ctxBench.fillStyle = '#94a3b8';
+            ctxBench.fillRect(m1X - 25 * scale, m1Y - 6 * scale, 50 * scale, 6 * scale);
+            ctxBench.fillStyle = '#cbd5e1';
+            ctxBench.fillRect(m1X - 25 * scale, m1Y, 50 * scale, 2 * scale);
+            ctxBench.fillText("Fixed Mirror 1", m1X - 30 * scale, m1Y - 12 * scale);
+
+            // 4. Movable Mirror 2 + Piezo Stage (Right)
+            const shiftX = (state.mirrorD_nm / 1300.0) * 8.0 * scale; // Visual exaggerated shift
+            ctxBench.save();
+            ctxBench.translate(m2X + shiftX, m2Y);
+            ctxBench.rotate((state.tilt_mrad * Math.PI) / 180.0 * 2.0); // Visual tilt angle
+
+            // Mirror Body
+            ctxBench.fillStyle = '#94a3b8';
+            ctxBench.fillRect(0, -25 * scale, 6 * scale, 50 * scale);
+            ctxBench.fillStyle = '#cbd5e1';
+            ctxBench.fillRect(-2 * scale, -25 * scale, 2 * scale, 50 * scale);
+
+            // Piezo Actuator Block behind mirror
+            ctxBench.fillStyle = '#6366f1';
+            ctxBench.fillRect(6 * scale, -15 * scale, 15 * scale, 30 * scale);
+            ctxBench.restore();
+
+            ctxBench.fillStyle = '#f8fafc';
+            ctxBench.fillText("M2 + Piezo Stage", m2X - 20 * scale, m2Y - 32 * scale);
+
+            // 5. 4-CdS Sensor Array Block (Bottom)
+            ctxBench.fillStyle = '#1e293b';
+            ctxBench.strokeStyle = '#475569';
+            ctxBench.fillRect(cdsX - 45 * scale, cdsY, 90 * scale, 20 * scale);
+            ctxBench.strokeRect(cdsX - 45 * scale, cdsY, 90 * scale, 20 * scale);
+
+            // Draw 4 Individual CdS Dots & Wires to ESP32
+            for (let i = 0; i < 4; i++) {
+                const dotX = cdsX - 30 * scale + i * 20 * scale;
+                const dotY = cdsY + 10 * scale;
+
+                // CdS Photocell symbol
+                ctxBench.beginPath();
+                ctxBench.arc(dotX, dotY, 5 * scale, 0, Math.PI * 2);
+                ctxBench.fillStyle = CHANNEL_COLORS[i];
+                ctxBench.fill();
+                ctxBench.strokeStyle = '#ffffff';
+                ctxBench.lineWidth = 1 * scale;
+                ctxBench.stroke();
+            }
+            ctxBench.fillStyle = '#cbd5e1';
+            ctxBench.fillText("4-CdS Array Detector Plane", cdsX - 55 * scale, cdsY + 36 * scale);
+        }
+
+        function drawGlowingBeam(x1, y1, x2, y2, color, width) {
+            ctxBench.beginPath();
+            ctxBench.moveTo(x1, y1);
+            ctxBench.lineTo(x2, y2);
+            ctxBench.strokeStyle = color;
+            ctxBench.lineWidth = width;
+            ctxBench.shadowColor = color;
+            ctxBench.shadowBlur = 10;
+            ctxBench.stroke();
+            ctxBench.shadowBlur = 0; // Reset
+        }
+
+        // --- CANVAS 2: SPATIAL FRINGE INTENSITY PROFILE ---
+        function drawSpatialFringeProfile() {
+            const w = canvasFringe.width;
+            const h = canvasFringe.height;
+            const scale = window.devicePixelRatio;
+
+            ctxFringe.clearRect(0, 0, w, h);
+
+            // Background & Center Axis
+            ctxFringe.strokeStyle = '#1e293b';
+            ctxFringe.lineWidth = 1 * scale;
+            ctxFringe.beginPath(); ctxFringe.moveTo(0, h/2); ctxFringe.lineTo(w, h/2); ctxFringe.stroke();
+            ctxFringe.beginPath(); ctxFringe.moveTo(w/2, 0); ctxFringe.lineTo(w/2, h); ctxFringe.stroke();
+
+            // Calculate Continuous Intensity Wave I(x) across canvas
+            ctxFringe.beginPath();
+            ctxFringe.lineWidth = 2 * scale;
+            ctxFringe.strokeStyle = state.laserOn ? '#ef4444' : '#475569';
+
+            const lambda_mm = LAMBDA_NM * 1e-6;
+            const theta_rad = state.tilt_mrad * 1e-3;
+            const spatialPitch_mm = lambda_mm / (2.0 * theta_rad);
+            const ambient = (parseFloat(sliderAmbient.value) / 100.0);
+
+            for (let px = 0; px < w; px++) {
+                // Map px (0..w) to physical x position (-2.5mm to +2.5mm)
+                const x_mm = ((px / w) - 0.5) * 5.0;
+
+                let I = ambient;
+                if (state.laserOn) {
+                    const phaseDeltaD = (4.0 * Math.PI * state.mirrorD_nm) / LAMBDA_NM;
+                    const phaseSpatial = (2.0 * Math.PI * x_mm) / spatialPitch_mm;
+                    const totalPhase = phaseDeltaD + phaseSpatial;
+                    const interference = 0.5 * (1.0 + Math.cos(totalPhase));
+                    I = interference * (1.0 - ambient) + ambient;
+                }
+
+                // Map I (0.0..1.0) to canvas Y (h-15 to 15)
+                const py = (h - 20 * scale) - I * (h - 40 * scale);
+
+                if (px === 0) ctxFringe.moveTo(px, py);
+                else ctxFringe.lineTo(px, py);
+            }
+            ctxFringe.stroke();
+
+            // Draw CdS Sensor Spatial Pins (-1.5mm, -0.5mm, +0.5mm, +1.5mm)
+            for (let i = 0; i < 4; i++) {
+                const x_mm = SENSOR_POSITIONS_MM[i];
+                const px = ((x_mm / 5.0) + 0.5) * w;
+
+                // Vertical dashed position line
+                ctxFringe.setLineDash([3 * scale, 3 * scale]);
+                ctxFringe.strokeStyle = CHANNEL_COLORS[i];
+                ctxFringe.beginPath();
+                ctxFringe.moveTo(px, 0);
+                ctxFringe.lineTo(px, h);
+                ctxFringe.stroke();
+                ctxFringe.setLineDash([]); // Reset dash
+
+                // Current Intensity Dot on curve
+                const I = state.smoothedIntensities[i];
+                const py = (h - 20 * scale) - I * (h - 40 * scale);
+
+                ctxFringe.beginPath();
+                ctxFringe.arc(px, py, 5 * scale, 0, Math.PI * 2);
+                ctxFringe.fillStyle = CHANNEL_COLORS[i];
+                ctxFringe.fill();
+                ctxFringe.strokeStyle = '#ffffff';
+                ctxFringe.lineWidth = 1.5 * scale;
+                ctxFringe.stroke();
+            }
+        }
+
+        // --- CANVAS 3: MULTI-CHANNEL SERIAL PLOTTER ---
+        function drawSerialPlotter() {
+            const w = canvasPlotter.width;
+            const h = canvasPlotter.height;
+            const scale = window.devicePixelRatio;
+
+            ctxPlotter.clearRect(0, 0, w, h);
+
+            // Grid Lines & Y-Axis Labels (0, 1024, 2048, 3072, 4095)
+            ctxPlotter.strokeStyle = '#1e293b';
+            ctxPlotter.lineWidth = 1 * scale;
+            ctxPlotter.fillStyle = '#64748b';
+            ctxPlotter.font = `${9 * scale}px monospace`;
+
+            const ticks = [0, 1024, 2048, 3072, 4095];
+            ticks.forEach(tick => {
+                const py = h - (tick / 4095.0) * (h - 24 * scale) - 12 * scale;
+                ctxPlotter.beginPath();
+                ctxPlotter.moveTo(0, py);
+                ctxPlotter.lineTo(w, py);
+                ctxPlotter.stroke();
+                ctxPlotter.fillText(`${tick}`, 6 * scale, py - 3 * scale);
+            });
+
+            // Draw History Traces for all 4 Channels
+            const history = state.plotterHistory;
+            const len = history.length;
+            if (len < 2) return;
+
+            for (let ch = 0; ch < 4; ch++) {
+                ctxPlotter.beginPath();
+                ctxPlotter.lineWidth = 2 * scale;
+                ctxPlotter.strokeStyle = CHANNEL_COLORS[ch];
+
+                for (let i = 0; i < len; i++) {
+                    const adcVal = history[i][ch];
+                    const px = (i / (MAX_HISTORY - 1)) * w;
+                    const py = h - (adcVal / 4095.0) * (h - 24 * scale) - 12 * scale;
+
+                    if (i === 0) ctxPlotter.moveTo(px, py);
+                    else ctxPlotter.lineTo(px, py);
+                }
+                ctxPlotter.stroke();
+            }
+        }
+
+        // --- EVENT BINDINGS & LISTENERS ---
+        btnToggleLaser.addEventListener('click', () => {
+            state.laserOn = !state.laserOn;
+            if (state.laserOn) {
+                btnToggleLaser.classList.replace('bg-slate-800', 'bg-red-600');
+                btnToggleLaser.classList.add('glow-red');
+                lblLaserState.innerText = "Laser ON";
+            } else {
+                btnToggleLaser.classList.replace('bg-red-600', 'bg-slate-800');
+                btnToggleLaser.classList.remove('glow-red');
+                lblLaserState.innerText = "Laser OFF";
+            }
+        });
+
+        btnPiezoSweep.addEventListener('click', () => {
+            state.piezoSweeping = !state.piezoSweeping;
+            if (state.piezoSweeping) {
+                btnPiezoSweep.classList.add('border-cyan-500', 'text-cyan-400');
+                lblPiezo.innerText = "Stop Piezo Sweep";
+            } else {
+                btnPiezoSweep.classList.remove('border-cyan-500', 'text-cyan-400');
+                lblPiezo.innerText = "Start Piezo Sweep";
+            }
+        });
+
+        btnAddVibe.addEventListener('click', () => {
+            state.vibrationOn = !state.vibrationOn;
+            if (state.vibrationOn) {
+                btnAddVibe.classList.add('border-amber-500', 'text-amber-400');
+                lblVibe.innerText = "Vibration Active";
+            } else {
+                btnAddVibe.classList.remove('border-amber-500', 'text-amber-400');
+                lblVibe.innerText = "Add Table Vibration";
+            }
+        });
+
+        btnResetPos.addEventListener('click', () => {
+            state.piezoSweeping = false;
+            state.vibrationOn = false;
+            state.mirrorD_nm = 0;
+            sliderMirrorD.value = 0;
+            btnPiezoSweep.classList.remove('border-cyan-500', 'text-cyan-400');
+            lblPiezo.innerText = "Start Piezo Sweep";
+            btnAddVibe.classList.remove('border-amber-500', 'text-amber-400');
+            lblVibe.innerText = "Add Table Vibration";
+        });
+
+        btnToggleLag.addEventListener('click', () => {
+            state.cdsLagEnabled = !state.cdsLagEnabled;
+            lblLag.innerText = state.cdsLagEnabled ? "CdS Lag: ON (30ms)" : "CdS Lag: OFF (Instant)";
+        });
+
+        btnPlotterPause.addEventListener('click', () => {
+            state.plotterPaused = !state.plotterPaused;
+            lblPause.innerText = state.plotterPaused ? "Resume Plot" : "Pause Plot";
+        });
+
+        btnPlotterClear.addEventListener('click', () => {
+            state.plotterHistory = [];
+            for (let i = 0; i < MAX_HISTORY; i++) {
+                state.plotterHistory.push([2048, 2048, 2048, 2048]);
+            }
+        });
+
+        sliderSpeed.addEventListener('input', (e) => {
+            state.plotSpeed = parseInt(e.target.value);
+        });
+
+        // Modal triggers
+        btnOpenGuide.addEventListener('click', () => modalGuide.classList.remove('hidden'));
+        btnCloseGuide.addEventListener('click', () => modalGuide.classList.add('hidden'));
+        btnCloseGuide2.addEventListener('click', () => modalGuide.classList.add('hidden'));
+
+        // --- MAIN ANIMATION LOOP ---
+        let lastTime = performance.now();
+
+        function animate(currentTime) {
+            const dt = (currentTime - lastTime) / 1000.0; // Delta time in seconds
+            lastTime = currentTime;
+
+            // 1. Update Physics State
+            updatePhysics(dt);
+
+            // 2. Render Canvas Views
+            drawOpticalBench();
+            drawSpatialFringeProfile();
+            drawSerialPlotter();
+
+            requestAnimationFrame(animate);
+        }
+
+        // Initialize setup on page load
+        window.onload = () => {
+            resizeCanvases();
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
